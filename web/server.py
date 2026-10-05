@@ -5,17 +5,26 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from agent.loop import run_agent
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+MIME = {".html": "text/html; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".css": "text/css; charset=utf-8"}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
-            with open(os.path.join(HERE, "index.html"), "rb") as f:
+        path = self.path.split("?")[0]
+        if path == "/":
+            path = "/index.html"
+        fp = os.path.join(HERE, path.lstrip("/"))
+        if os.path.isfile(fp):
+            with open(fp, "rb") as f:
                 data = f.read()
+            ext = os.path.splitext(fp)[1]
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", MIME.get(ext, "application/octet-stream"))
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

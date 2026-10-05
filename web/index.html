@@ -14,6 +14,9 @@ button:disabled { background: #95a5a6; cursor: not-allowed; }
 #status { color: #7f8c8d; margin: 10px 0; min-height: 24px; }
 #report { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: pre-wrap; font-family: "Consolas", monospace; font-size: 14px; line-height: 1.6; display: none; }
 </style>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#3498db">
+<meta name="apple-mobile-web-app-capable" content="yes">
 </head>
 <body>
 <h1>Open Research Agent</h1>
@@ -49,6 +52,11 @@ function start() {
   })
   .catch(function(e) { status.textContent = "失败: " + e.message; })
   .finally(function() { btn.disabled = false; btn.textContent = "开始研究"; });
+}
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
 }
 </script>
 </body>
