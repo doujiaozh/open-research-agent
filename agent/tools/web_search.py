@@ -20,6 +20,22 @@ STOP = set(["最新", "进展", "研究", "消息", "动态", "新闻", "信息"
 
 
 
+TECH_KEYWORDS = set([
+
+    "2026", "2025", "2024", "量产", "产能", "成本", "技术", "路线",
+
+    "中科院", "宁德时代", "比亚迪", "丰田", "三星", "国轩", "赣锋", "清陶",
+
+    "硫化物", "氧化物", "聚合物", "能量密度", "电解质", "产业链",
+
+    "政策", "专利", "投资", "生产", "装车", "上市", "材料", "研发",
+
+    "电芯", "负极", "正极", "充电", "续航", "锂电",
+
+])
+
+
+
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0"
 
 HDRS = {"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"}
@@ -46,7 +62,55 @@ def _core_terms(query):
 
 
 
-def _match(title, snippet, core_terms):
+def _has_core(text, core_terms):
+
+    """核心词必须出现完整词 或 前 3 字"""
+
+    for t in core_terms:
+
+        if t in text:
+
+            return True
+
+        if len(t) >= 3 and t[:3] in text:
+
+            return True
+
+    return False
+
+
+
+
+
+def _strict_match(title, snippet, core_terms):
+
+    """严格: 必须有核心词(完整/前3字) 且 有技术关键词"""
+
+    if not core_terms:
+
+        return False
+
+    text = title + " " + snippet
+
+    if not _has_core(text, core_terms):
+
+        return False
+
+    for kw in TECH_KEYWORDS:
+
+        if kw in text:
+
+            return True
+
+    return False
+
+
+
+
+
+def _loose_match(title, snippet, core_terms):
+
+    """宽松: 只要有核心词"""
 
     if not core_terms:
 
@@ -54,13 +118,7 @@ def _match(title, snippet, core_terms):
 
     text = title + " " + snippet
 
-    for t in core_terms:
-
-        if t[:2] in text:
-
-            return True
-
-    return False
+    return _has_core(text, core_terms)
 
 
 
@@ -124,7 +182,7 @@ def _try_baidu(query, top_k=5):
 
                     snippet = sp.get_text(strip=True)[:200]
 
-            if not _match(title, snippet, core_terms):
+            if not _loose_match(title, snippet, core_terms):
 
                 continue
 
@@ -140,7 +198,7 @@ def _try_baidu(query, top_k=5):
 
 
 
-def _try_bing(query, top_k=5):
+def _try_bing_strict(query, top_k=5):
 
     try:
 
@@ -184,7 +242,7 @@ def _try_bing(query, top_k=5):
 
             snippet = p.get_text(strip=True) if p else ""
 
-            if not _match(title, snippet, core_terms):
+            if not _strict_match(title, snippet, core_terms):
 
                 continue
 
@@ -202,15 +260,13 @@ def _try_bing(query, top_k=5):
 
 def web_search(query, top_k=5):
 
-    """先 Baidu, 不够再 Bing, 合并结果"""
-
     baidu = _try_baidu(query, top_k)
 
     if len(baidu) >= top_k:
 
         return "\n".join(baidu)
 
-    bing = _try_bing(query, top_k - len(baidu))
+    bing = _try_bing_strict(query, top_k - len(baidu))
 
     combined = baidu + bing
 
@@ -218,5 +274,11 @@ def web_search(query, top_k=5):
 
         return "无结果"
 
-    return "\n".join(combined)
+    out = "\n".join(combined)
+
+    if bing and len(baidu) < top_k:
+
+        out += "\n[百度 " + str(len(baidu)) + " 条 + Bing 严格 " + str(len(bing)) + " 条]"
+
+    return out
 
