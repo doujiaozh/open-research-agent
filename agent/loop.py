@@ -8,11 +8,16 @@ from .memory import save_run
 
 console = Console()
 MAX_STEPS = int(os.getenv("MAX_STEPS", "15"))
+MAX_SEARCHES = int(os.getenv("MAX_SEARCHES", "5"))
 
 
 def run_agent(goal, auto_confirm=False):
     state = AgentState(goal=goal)
     console.print("[bold green]目标:[/bold green] " + goal + "\n")
+
+    visited_queries = set()
+    visited_urls = set()
+    search_count = 0
 
     # 第 0 步：强制首次搜索，绕过 LLM，直接把 goal 作为 query
     console.print("[cyan]初始搜索[/cyan] -> web_search")
@@ -28,6 +33,8 @@ def run_agent(goal, auto_confirm=False):
         args={"query": goal, "top_k": 5},
         observation=obs0,
     ))
+    visited_queries.add(goal)
+    search_count += 1
 
     for step in range(MAX_STEPS):
         try:
@@ -65,12 +72,52 @@ def run_agent(goal, auto_confirm=False):
                 ))
                 continue
 
-        # 修正：如果模型选 web_search 但 query 为空或太短，用 goal 顶替
+        # query 为空或太短，用 goal 顶替
         if decision.action == "web_search":
             q = (decision.args or {}).get("query", "")
             if not q or len(str(q).strip()) < 3:
                 decision.args = {"query": goal, "top_k": 5}
                 console.print("  [yellow](query 为空，已用目标顶替)[/yellow]")
+
+        # 去重 + 搜索次数上限
+        if decision.action == "web_search":
+            q = (decision.args or {}).get("query", "")
+            if q in visited_queries:
+                console.print("  [yellow](重复 query, 跳过)[/yellow]")
+                state.history.append(Step(
+                    step=step,
+                    action="web_search",
+                    args=decision.args,
+                    observation="重复 query, 已跳过"
+                ))
+                continue
+            if search_count >= MAX_SEARCHES:
+                console.print("  [yellow](搜索已达 " + str(MAX_SEARCHES) + " 次上限, 强制 final)[/yellow]")
+                observations = [s.observation for s in state.history]
+                if not observations:
+                    return "未收集到任何资料，无法生成报告"
+                try:
+                    result = write_report(goal, observations)
+                except Exception as e:
+                    return "生成报告失败: " + str(e)
+                console.print("\n[bold green]完成[/bold green]\n")
+                save_run(goal, [s.dict() for s in state.history], result)
+                return result
+            visited_queries.add(q)
+            search_count += 1
+
+        elif decision.action == "fetch_url":
+            u = (decision.args or {}).get("url", "")
+            if u in visited_urls:
+                console.print("  [yellow](重复 url, 跳过)[/yellow]")
+                state.history.append(Step(
+                    step=step,
+                    action="fetch_url",
+                    args=decision.args,
+                    observation="重复 url, 已跳过"
+                ))
+                continue
+            visited_urls.add(u)
 
         try:
             obs = TOOLS[decision.action](**decision.args)
