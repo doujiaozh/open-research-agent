@@ -1,0 +1,55 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Open Research Agent</title>
+<style>
+body { font-family: "Segoe UI", Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; color: #333; }
+h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+.form { display: flex; gap: 10px; margin: 30px 0; }
+input { flex: 1; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+button { padding: 12px 30px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
+button:hover { background: #2980b9; }
+button:disabled { background: #95a5a6; cursor: not-allowed; }
+#status { color: #7f8c8d; margin: 10px 0; min-height: 24px; }
+#report { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: pre-wrap; font-family: "Consolas", monospace; font-size: 14px; line-height: 1.6; display: none; }
+</style>
+</head>
+<body>
+<h1>Open Research Agent</h1>
+<p>输入一个研究主题，Agent 会自动搜索、读取网页、生成带来源的 Markdown 报告。</p>
+<div class="form">
+<input id="topic" placeholder="例如：固态电池最新进展" value="固态电池最新进展">
+<button id="go" onclick="start()">开始研究</button>
+</div>
+<div id="status"></div>
+<pre id="report"></pre>
+<script>
+function start() {
+  var topic = document.getElementById("topic").value.trim();
+  if (!topic) { alert("请输入主题"); return; }
+  var btn = document.getElementById("go");
+  var status = document.getElementById("status");
+  var report = document.getElementById("report");
+  btn.disabled = true;
+  btn.textContent = "研究中...";
+  status.textContent = "正在搜索并生成报告，可能需要 30-90 秒...";
+  report.style.display = "none";
+  fetch("/research", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({topic: topic})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    status.textContent = "完成";
+    if (d.error) report.textContent = "错误: " + d.error;
+    else report.textContent = d.report;
+    report.style.display = "block";
+  })
+  .catch(function(e) { status.textContent = "失败: " + e.message; })
+  .finally(function() { btn.disabled = false; btn.textContent = "开始研究"; });
+}
+</script>
+</body>
+</html>
