@@ -10,11 +10,35 @@ load_dotenv()
 
 
 
+BACKENDS = {
+
+    "zhipu":       ("https://open.bigmodel.cn/api/paas/v4",       "glm-4-flash"),
+
+    "deepseek":    ("https://api.deepseek.com/v1",                "deepseek-chat"),
+
+    "siliconflow": ("https://api.siliconflow.cn/v1",              "Qwen/Qwen2.5-7B-Instruct"),
+
+    "moonshot":    ("https://api.moonshot.cn/v1",                 "kimi-k2.6"),
+
+    "intern":      ("https://discovery-api.intern-ai.org.cn/v1",  "deepseek-v4-flash-0731"),
+
+    "openai":      ("https://api.openai.com/v1",                  "gpt-4o-mini"),
+
+}
+
+
+
+BACKEND = os.getenv("BACKEND", "")
+
+_default_url, _default_model = BACKENDS.get(BACKEND, ("https://api.openai.com/v1", "kimi-k2.6"))
+
+
+
 API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+BASE_URL = os.getenv("OPENAI_BASE_URL", _default_url).rstrip("/")
 
-MODEL = os.getenv("MODEL", "kimi-k2.6")
+MODEL = os.getenv("MODEL", _default_model)
 
 
 
