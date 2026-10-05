@@ -54,8 +54,6 @@ KEYWORD_POOL = [
 
 def _extract_core(goal):
 
-    """从 goal 里抠最长的核心名词, 去掉 STOP 词"""
-
     parts = re.findall(r"[\u4e00-\u9fa5]+", goal)
 
     all_terms = []
@@ -110,17 +108,37 @@ def _build_candidates(goal, max_n=5):
 
 
 
-def run_agent(goal, auto_confirm=False):
+def run_agent(goal, auto_confirm=False, on_event=None):
+
+    """on_event(type, data) 会在关键节点被调用, 用于流式推送到 Web UI"""
+
+    def emit(t, d=None):
+
+        if on_event:
+
+            try:
+
+                on_event(t, d or {})
+
+            except Exception:
+
+                pass
+
+
 
     state = AgentState(goal=goal)
 
     console.print("[bold green]目标:[/bold green] " + goal + "\n")
+
+    emit("start", {"goal": goal})
 
 
 
     console.print("[cyan]初始搜索[/cyan] -> web_search")
 
     console.print("  查询: " + goal)
+
+    emit("step", {"step": 0, "action": "web_search", "query": goal})
 
     try:
 
@@ -131,6 +149,8 @@ def run_agent(goal, auto_confirm=False):
         obs0 = "工具错误: " + str(e)
 
     console.print("  结果: " + obs0[:200].replace("\n", " ") + "...")
+
+    emit("result", {"step": 0, "preview": obs0[:300]})
 
     state.history.append(Step(
 
@@ -149,6 +169,8 @@ def run_agent(goal, auto_confirm=False):
     for i, c in enumerate(candidates):
 
         console.print("  " + str(i + 1) + ". " + c)
+
+    emit("candidates", {"list": candidates})
 
     console.print("")
 
@@ -170,6 +192,8 @@ def run_agent(goal, auto_confirm=False):
 
             console.print("[red]解析决策失败:[/red] " + str(e))
 
+            emit("error", {"message": str(e)})
+
             return "决策失败: " + str(e)
 
 
@@ -180,11 +204,15 @@ def run_agent(goal, auto_confirm=False):
 
             console.print("  思考: " + decision.thought)
 
+        emit("step", {"step": step + 1, "action": decision.action, "thought": decision.thought})
+
 
 
         if decision.done or decision.action == "final":
 
             console.print("\n[cyan]正在生成报告...[/cyan]")
+
+            emit("status", {"message": "正在生成报告..."})
 
             observations = [s.observation for s in state.history]
 
@@ -198,11 +226,15 @@ def run_agent(goal, auto_confirm=False):
 
             except Exception as e:
 
+                emit("error", {"message": str(e)})
+
                 return "生成报告失败: " + str(e)
 
             console.print("\n[bold green]完成[/bold green]\n")
 
             save_run(goal, [s.dict() for s in state.history], result)
+
+            emit("done", {"report": result})
 
             return result
 
@@ -232,6 +264,8 @@ def run_agent(goal, auto_confirm=False):
 
                 console.print("  [yellow](候选 query 用完，强制 final)[/yellow]")
 
+                emit("status", {"message": "候选 query 用完, 生成报告"})
+
                 observations = [s.observation for s in state.history]
 
                 try:
@@ -240,17 +274,23 @@ def run_agent(goal, auto_confirm=False):
 
                 except Exception as e:
 
+                    emit("error", {"message": str(e)})
+
                     return "生成报告失败: " + str(e)
 
                 console.print("\n[bold green]完成[/bold green]\n")
 
                 save_run(goal, [s.dict() for s in state.history], result)
 
+                emit("done", {"report": result})
+
                 return result
 
             forced_q = candidates[cand_idx]
 
             console.print("  [yellow](强制使用候选 query: " + forced_q + ")[/yellow]")
+
+            emit("status", {"message": "搜索: " + forced_q})
 
             decision.args = {"query": forced_q, "top_k": 5}
 
@@ -271,6 +311,8 @@ def run_agent(goal, auto_confirm=False):
         preview = obs[:200].replace("\n", " ")
 
         console.print("  结果: " + preview + "...")
+
+        emit("result", {"step": step + 1, "preview": obs[:300]})
 
 
 
@@ -295,6 +337,8 @@ def run_agent(goal, auto_confirm=False):
                 pass
 
 
+
+    emit("error", {"message": "达到最大步数"})
 
     return "达到最大步数，未完成"
 

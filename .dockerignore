@@ -1,0 +1,10 @@
+run.bat
+start_server.vbs
+stop_server.vbs
+run_hidden.vbs
+.git
+*.bat
+*.vbs
+__pycache__
+data
+.env

@@ -1,63 +1,382 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
+
 <html lang="zh-CN">
+
 <head>
+
 <meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>Open Research Agent</title>
-<style>
-body { font-family: "Segoe UI", Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; color: #333; }
-h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-.form { display: flex; gap: 10px; margin: 30px 0; }
-input { flex: 1; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
-button { padding: 12px 30px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
-button:hover { background: #2980b9; }
-button:disabled { background: #95a5a6; cursor: not-allowed; }
-#status { color: #7f8c8d; margin: 10px 0; min-height: 24px; }
-#report { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: pre-wrap; font-family: "Consolas", monospace; font-size: 14px; line-height: 1.6; display: none; }
-</style>
+
 <link rel="manifest" href="/manifest.json">
+
 <meta name="theme-color" content="#3498db">
+
 <meta name="apple-mobile-web-app-capable" content="yes">
+
+<style>
+
+body { font-family: "Segoe UI", Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; color: #333; }
+
+h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+
+.config { background: #fff; padding: 16px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+
+.row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+
+.row label { min-width: 80px; font-size: 14px; color: #555; align-self: center; }
+
+input, select { flex: 1; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; min-width: 200px; }
+
+input:focus, select:focus { outline: none; border-color: #3498db; }
+
+button { padding: 10px 24px; font-size: 15px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
+
+button:hover:not(:disabled) { background: #2980b9; }
+
+button:disabled { background: #95a5a6; cursor: not-allowed; }
+
+#log { background: #1e1e1e; color: #d4d4d4; font-family: Consolas, monospace; font-size: 13px; padding: 16px; border-radius: 8px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; display: none; margin-top: 16px; }
+
+#log .step { color: #4ec9b0; }
+
+#log .status { color: #ce9178; }
+
+#log .result { color: #9cdcfe; }
+
+#log .error { color: #f48771; }
+
+#report { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: pre-wrap; font-family: "Consolas", monospace; font-size: 14px; line-height: 1.7; display: none; margin-top: 20px; }
+
+#actions { margin-top: 16px; display: none; gap: 10px; }
+
+#actions button { background: #27ae60; }
+
+#actions button:hover { background: #229954; }
+
+@media print {
+
+  body { background: white; margin: 0; }
+
+  h1, .config, #log, #actions, #status { display: none !important; }
+
+  #report { box-shadow: none; padding: 0; }
+
+}
+
+</style>
+
 </head>
+
 <body>
+
 <h1>Open Research Agent</h1>
-<p>输入一个研究主题，Agent 会自动搜索、读取网页、生成带来源的 Markdown 报告。</p>
-<div class="form">
-<input id="topic" placeholder="例如：固态电池最新进展" value="固态电池最新进展">
-<button id="go" onclick="start()">开始研究</button>
+
+
+
+<div class="config">
+
+  <div class="row">
+
+    <label>后端</label>
+
+    <select id="backend">
+
+      <option value="">默认（服务端配置）</option>
+
+      <option value="intern">Intern InkStone（免费额度）</option>
+
+      <option value="zhipu">智谱 GLM</option>
+
+      <option value="deepseek">DeepSeek</option>
+
+      <option value="siliconflow">硅基流动</option>
+
+      <option value="moonshot">Kimi</option>
+
+      <option value="openai">OpenAI</option>
+
+    </select>
+
+  </div>
+
+  <div class="row">
+
+    <label>API Key</label>
+
+    <input id="apiKey" type="password" placeholder="粘贴你自己的 Key（仅保存在本地浏览器）">
+
+  </div>
+
+  <div class="row">
+
+    <label>研究主题</label>
+
+    <input id="topic" placeholder="例如：固态电池最新进展" value="固态电池最新进展">
+
+  </div>
+
+  <div class="row">
+
+    <button id="go">开始研究</button>
+
+  </div>
+
 </div>
-<div id="status"></div>
-<pre id="report"></pre>
+
+
+
+<div id="status" style="color:#7f8c8d;min-height:24px;"></div>
+
+<div id="log"></div>
+
+<div id="report"></div>
+
+<div id="actions">
+
+  <button id="pdf">下载 PDF</button>
+
+  <button id="copy" style="background:#7f8c8d;">复制报告</button>
+
+</div>
+
+
+
 <script>
+
+var savedKey = localStorage.getItem("ora_key") || "";
+
+var savedBackend = localStorage.getItem("ora_backend") || "";
+
+if (savedKey) document.getElementById("apiKey").value = savedKey;
+
+if (savedBackend) document.getElementById("backend").value = savedBackend;
+
+
+
+document.getElementById("apiKey").addEventListener("change", function() {
+
+  localStorage.setItem("ora_key", this.value);
+
+});
+
+document.getElementById("backend").addEventListener("change", function() {
+
+  localStorage.setItem("ora_backend", this.value);
+
+});
+
+
+
+function logLine(cls, text) {
+
+  var log = document.getElementById("log");
+
+  log.style.display = "block";
+
+  var span = document.createElement("span");
+
+  span.className = cls;
+
+  span.textContent = text + String.fromCharCode(10);
+
+  log.appendChild(span);
+
+  log.scrollTop = log.scrollHeight;
+
+}
+
+
+
 function start() {
+
   var topic = document.getElementById("topic").value.trim();
+
   if (!topic) { alert("请输入主题"); return; }
+
   var btn = document.getElementById("go");
+
   var status = document.getElementById("status");
+
   var report = document.getElementById("report");
+
+  var log = document.getElementById("log");
+
+  var actions = document.getElementById("actions");
+
+  var key = document.getElementById("apiKey").value.trim();
+
+  var backend = document.getElementById("backend").value;
+
+
+
   btn.disabled = true;
+
   btn.textContent = "研究中...";
-  status.textContent = "正在搜索并生成报告，可能需要 30-90 秒...";
+
+  status.textContent = "已开始，实时日志如下：";
+
+  log.innerHTML = "";
+
+  log.style.display = "block";
+
   report.style.display = "none";
+
+  actions.style.display = "none";
+
+  report.textContent = "";
+
+
+
   fetch("/research", {
+
     method: "POST",
+
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({topic: topic})
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    status.textContent = "完成";
-    if (d.error) report.textContent = "错误: " + d.error;
-    else report.textContent = d.report;
-    report.style.display = "block";
-  })
-  .catch(function(e) { status.textContent = "失败: " + e.message; })
-  .finally(function() { btn.disabled = false; btn.textContent = "开始研究"; });
+
+    body: JSON.stringify({topic: topic, api_key: key, backend: backend})
+
+  }).then(function(resp) {
+
+    if (!resp.ok) {
+
+      return resp.text().then(function(t) { throw new Error(t); });
+
+    }
+
+    var reader = resp.body.getReader();
+
+    var decoder = new TextDecoder();
+
+    var buffer = "";
+
+    var SEP = String.fromCharCode(10) + String.fromCharCode(10);
+
+
+
+    function pump() {
+
+      return reader.read().then(function(r) {
+
+        if (r.done) return;
+
+        buffer += decoder.decode(r.value, {stream: true});
+
+        var parts = buffer.split(SEP);
+
+        buffer = parts.pop();
+
+        parts.forEach(function(p) {
+
+          if (p.indexOf("data: ") !== 0) return;
+
+          var payload = p.slice(6);
+
+          if (payload === "[DONE]") return;
+
+          try {
+
+            var obj = JSON.parse(payload);
+
+            handleEvent(obj);
+
+          } catch(e) {}
+
+        });
+
+        return pump();
+
+      });
+
+    }
+
+
+
+    function handleEvent(obj) {
+
+      var t = obj.type, d = obj.data || {};
+
+      if (t === "start") logLine("", "目标: " + d.goal);
+
+      else if (t === "step") {
+
+        var line = "[" + (d.step || 0) + "] " + (d.action || "");
+
+        if (d.thought) line += " | " + d.thought;
+
+        logLine("step", line);
+
+      }
+
+      else if (t === "candidates") logLine("", "候选 query: " + (d.list || []).join(" / "));
+
+      else if (t === "status") logLine("status", d.message);
+
+      else if (t === "result") logLine("result", "  -> " + (d.preview || "").slice(0, 200));
+
+      else if (t === "error") logLine("error", "错误: " + d.message);
+
+      else if (t === "done") {
+
+        report.textContent = d.report || "";
+
+        report.style.display = "block";
+
+        actions.style.display = "flex";
+
+        status.textContent = "完成";
+
+      }
+
+    }
+
+
+
+    return pump();
+
+  }).catch(function(e) {
+
+    logLine("error", "请求失败: " + e.message);
+
+    status.textContent = "失败";
+
+  }).finally(function() {
+
+    btn.disabled = false;
+
+    btn.textContent = "开始研究";
+
+  });
+
 }
-</script>
-<script>
+
+
+
+document.getElementById("go").addEventListener("click", start);
+
+document.getElementById("pdf").addEventListener("click", function() { window.print(); });
+
+document.getElementById("copy").addEventListener("click", function() {
+
+  var txt = document.getElementById("report").textContent;
+
+  navigator.clipboard.writeText(txt).then(function() { alert("已复制"); });
+
+});
+
+
+
 if ("serviceWorker" in navigator) {
+
   navigator.serviceWorker.register("/sw.js");
+
 }
+
 </script>
+
 </body>
+
 </html>
+
