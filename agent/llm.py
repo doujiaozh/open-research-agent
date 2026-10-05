@@ -67,7 +67,7 @@ def _chat(messages, temperature=0.2, max_tokens=1024):
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
-    with httpx.Client(timeout=180) as client:
+    with httpx.Client(timeout=300) as client:
         r = client.post(url, headers=headers, json=payload)
         if r.status_code != 200:
             raise RuntimeError("HTTP " + str(r.status_code) + ": " + r.text[:500])
@@ -135,7 +135,7 @@ def write_report(goal, observations):
         "资料：\n" + context[:12000]
     )
     messages = [{"role": "user", "content": prompt}]
-    return _chat(messages, temperature=0.3, max_tokens=4096).strip()
+    return _chat(messages, temperature=0.3, max_tokens=2048).strip()
 
 
 def summarize(text):

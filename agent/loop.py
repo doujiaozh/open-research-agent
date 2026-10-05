@@ -20,63 +20,89 @@ MAX_STEPS = int(os.getenv("MAX_STEPS", "15"))
 
 
 
-STOPWORDS = set([
+STOP_WORDS = set([
 
-    "最新", "进展", "研究", "数据", "报告", "消息", "动态", "新闻", "信息",
+    "最新", "进展", "研究", "消息", "动态", "新闻", "信息", "报告",
 
-    "中国", "全球", "市场", "产业", "行业", "领域", "方面", "情况", "问题",
+    "分析", "解读", "观察", "深度", "相关", "有关", "关于", "数据",
 
-    "分析", "观察", "解读", "深度", "全部", "内容", "相关", "有关", "关于",
+    "中国", "全球", "市场", "产业", "行业", "领域", "方面", "情况",
 
-    "百度", "百科", "知乎", "新浪", "腾讯", "搜狐", "网易", "今日", "头条",
+    "问题", "内容", "全部", "百度", "百科", "知乎", "新浪", "腾讯",
 
-    "我们", "他们", "什么", "为什么", "如何", "怎样",
+    "搜狐", "网易", "今日", "头条", "我们", "他们", "什么", "如何",
 
 ])
 
 
 
+KEYWORD_POOL = [
+
+    "2026", "2025", "量产", "技术路线", "成本", "产能",
+
+    "中科院", "宁德时代", "比亚迪", "丰田", "三星",
+
+    "硫化物", "氧化物", "聚合物", "能量密度", "固态电解质",
+
+    "产业链", "政策", "专利", "投资",
+
+]
 
 
-def _build_candidates(goal, first_obs, max_n=5):
+
+
+
+def _extract_core(goal):
+
+    """从 goal 里抠最长的核心名词, 去掉 STOP 词"""
+
+    parts = re.findall(r"[\u4e00-\u9fa5]+", goal)
+
+    all_terms = []
+
+    for p in parts:
+
+        temp = p
+
+        for sw in sorted(STOP_WORDS, key=len, reverse=True):
+
+            temp = temp.replace(sw, "|")
+
+        for seg in temp.split("|"):
+
+            seg = seg.strip()
+
+            if len(seg) >= 2:
+
+                all_terms.append(seg)
+
+    if not all_terms:
+
+        return goal
+
+    return max(all_terms, key=len)
+
+
+
+
+
+def _build_candidates(goal, max_n=5):
+
+    core = _extract_core(goal)
 
     candidates = []
 
-    seen = set()
+    for kw in KEYWORD_POOL:
 
-    titles = re.findall(r"-\s*([^\n]+)", first_obs)
+        if kw in goal or kw in core:
 
-    for t in titles:
+            continue
 
-        for w in re.findall(r"[\u4e00-\u9fa5]{2,6}", t):
+        candidates.append('"' + core + '" ' + kw)
 
-            w = w.strip()
+        if len(candidates) >= max_n:
 
-            if len(w) < 2:
-
-                continue
-
-            if w in STOPWORDS:
-
-                continue
-
-            if w in goal:
-
-                continue
-
-            q = goal + " " + w
-
-            if q in seen:
-
-                continue
-
-            seen.add(q)
-
-            candidates.append(q)
-
-            if len(candidates) >= max_n:
-
-                return candidates
+            break
 
     return candidates
 
@@ -116,7 +142,7 @@ def run_agent(goal, auto_confirm=False):
 
 
 
-    candidates = _build_candidates(goal, obs0)
+    candidates = _build_candidates(goal)
 
     console.print("\n[cyan]候选 query:[/cyan]")
 
