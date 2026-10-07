@@ -1,4 +1,4 @@
-import os, json, re, time
+﻿import os, json, re, time
 
 import httpx
 
@@ -18,9 +18,11 @@ BACKENDS = {
 
     "siliconflow": ("https://api.siliconflow.cn/v1",              "Qwen/Qwen2.5-7B-Instruct"),
 
-    "moonshot":    ("https://api.moonshot.cn/v1",                 "kimi-k2.6"),
+    "moonshot":    ("https://api.moonshot.cn/v1",                 "moonshot-v1-8k"),
 
     "intern":      ("https://discovery-api.intern-ai.org.cn/v1",  "deepseek-v4-flash-0731"),
+
+    "kimi":        ("https://api.doujiao.ccwu.cc/v1",             "kimi-k3.1"),
 
     "openai":      ("https://api.openai.com/v1",                  "gpt-4o-mini"),
 
@@ -30,7 +32,7 @@ BACKENDS = {
 
 BACKEND = os.getenv("BACKEND", "")
 
-_default_url, _default_model = BACKENDS.get(BACKEND, ("https://api.openai.com/v1", "kimi-k2.6"))
+_default_url, _default_model = BACKENDS.get(BACKEND, ("https://api.openai.com/v1", "kimi-k3.1"))
 
 
 
@@ -82,23 +84,13 @@ JSON 字段：
 
 
 
-【web_search 严格规则 - 必读】
+【web_search 严格规则】
 
-- 上面"已搜索过的 query"列表里出现过的词，禁止再次使用。
+- 禁止重复已搜索过的 query。
 
-- 每次 web_search 的 query 必须与列表里所有 query 都不同。
+- 换关键词策略：加时间（2026）/ 加机构（中科院、宁德时代）/ 加技术（硫化物、能量密度）。
 
-- 换关键词的策略（依次尝试）：
-
-  1. 加时间限定：例如 "2026"
-
-  2. 加具体企业/机构名：例如 "宁德时代"、"比亚迪"、"中科院"
-
-  3. 加具体技术词：例如 "硫化物电解质"、"能量密度"
-
-  4. 加地域限定：例如 "中国"、"日本"
-
-- 如果换了 2-3 次还是没有新结果，直接 final。
+- 换了 2-3 次仍无新结果就 final。
 
 """
 
@@ -130,7 +122,7 @@ def _extract_json(text):
 
         return json.loads(m.group(0))
 
-    raise ValueError("无法从模型输出中解析 JSON: " + text[:300])
+    raise ValueError("无法解析 JSON: " + text[:300])
 
 
 
@@ -140,25 +132,9 @@ def _chat(messages, temperature=0.2, max_tokens=1024, max_retries=2):
 
     url = BASE_URL + "/chat/completions"
 
-    headers = {
+    headers = {"Authorization": "Bearer " + API_KEY, "Content-Type": "application/json"}
 
-        "Authorization": "Bearer " + API_KEY,
-
-        "Content-Type": "application/json",
-
-    }
-
-    payload = {
-
-        "model": MODEL,
-
-        "messages": messages,
-
-        "temperature": temperature,
-
-        "max_tokens": max_tokens,
-
-    }
+    payload = {"model": MODEL, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
 
     last_err = None
 
@@ -178,15 +154,7 @@ def _chat(messages, temperature=0.2, max_tokens=1024, max_retries=2):
 
             msg = data["choices"][0]["message"]
 
-            content = msg.get("content")
-
-            if not content:
-
-                content = msg.get("reasoning_content")
-
-            if not content:
-
-                content = msg.get("reasoning")
+            content = msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning")
 
             if not content:
 
@@ -198,9 +166,7 @@ def _chat(messages, temperature=0.2, max_tokens=1024, max_retries=2):
 
             last_err = e
 
-            err_str = str(e)
-
-            if "timed out" in err_str.lower() or "timeout" in err_str.lower():
+            if "timed out" in str(e).lower() or "timeout" in str(e).lower():
 
                 print("[llm] timeout, retry " + str(attempt + 1) + "/" + str(max_retries))
 
@@ -210,7 +176,67 @@ def _chat(messages, temperature=0.2, max_tokens=1024, max_retries=2):
 
             raise
 
-    raise RuntimeError("重试 " + str(max_retries) + " 次后仍失败: " + str(last_err))
+    raise RuntimeError("重试失败: " + str(last_err))
+
+
+
+
+
+def _chat_stream(messages, temperature=0.3, max_tokens=2048, on_chunk=None):
+
+    url = BASE_URL + "/chat/completions"
+
+    headers = {"Authorization": "Bearer " + API_KEY, "Content-Type": "application/json"}
+
+    payload = {"model": MODEL, "messages": messages, "temperature": temperature,
+
+               "max_tokens": max_tokens, "stream": True}
+
+    full = []
+
+    with httpx.Client(timeout=300) as client:
+
+        with client.stream("POST", url, headers=headers, json=payload) as r:
+
+            if r.status_code != 200:
+
+                body = r.read().decode("utf-8", "ignore")
+
+                raise RuntimeError("HTTP " + str(r.status_code) + ": " + body[:300])
+
+            for line in r.iter_lines():
+
+                if not line:
+
+                    continue
+
+                if line.startswith("data: "):
+
+                    line = line[6:]
+
+                if line == "[DONE]":
+
+                    break
+
+                try:
+
+                    obj = json.loads(line)
+
+                    delta = obj["choices"][0].get("delta", {}).get("content")
+
+                    if delta:
+
+                        full.append(delta)
+
+                        if on_chunk:
+
+                            on_chunk(delta)
+
+                except Exception:
+
+                    continue
+
+    return "".join(full)
 
 
 
@@ -218,9 +244,7 @@ def _chat(messages, temperature=0.2, max_tokens=1024, max_retries=2):
 
 def _extract_past_queries(history):
 
-    past_queries = []
-
-    past_urls = []
+    past_queries, past_urls = [], []
 
     for h in history:
 
@@ -252,41 +276,17 @@ def decide(state_dict):
 
     past_queries, past_urls = _extract_past_queries(history)
 
+    extra = "\n\n【已搜索过的 query, 禁止重复】\n"
 
+    extra += ("\n".join("- " + q for q in past_queries) if past_queries else "（暂无）")
 
-    extra = "\n\n【已搜索过的 query，禁止再次使用】\n"
+    extra += "\n\n【已读取过的 url, 禁止重复】\n"
 
-    if past_queries:
+    extra += ("\n".join("- " + u for u in past_urls) if past_urls else "（暂无）")
 
-        for q in past_queries:
+    user_text = DECIDE_PROMPT + extra + "\n\n当前状态:\n" + json.dumps(state_dict, ensure_ascii=False)
 
-            extra += "- " + q + "\n"
-
-    else:
-
-        extra += "（暂无）\n"
-
-
-
-    extra += "\n【已读取过的 url，禁止重复读取】\n"
-
-    if past_urls:
-
-        for u in past_urls:
-
-            extra += "- " + u + "\n"
-
-    else:
-
-        extra += "（暂无）\n"
-
-
-
-    user_text = DECIDE_PROMPT + extra + "\n\n当前状态：\n" + json.dumps(state_dict, ensure_ascii=False)
-
-    messages = [{"role": "user", "content": user_text}]
-
-    text = _chat(messages, temperature=0.6, max_tokens=1024)
+    text = _chat([{"role": "user", "content": user_text}], temperature=0.6, max_tokens=1024)
 
     return _extract_json(text)
 
@@ -294,7 +294,7 @@ def decide(state_dict):
 
 
 
-def write_report(goal, observations):
+def write_report(goal, observations, on_chunk=None):
 
     context = "\n\n".join(observations)
 
@@ -304,7 +304,7 @@ def write_report(goal, observations):
 
         "严格要求：\n"
 
-        "1. 总长度控制在 800-1200 字，不要写太长。\n"
+        "1. 总长度控制在 800-1200 字。\n"
 
         "2. 分 4-5 个小节，每节 2-4 句话。\n"
 
@@ -312,7 +312,7 @@ def write_report(goal, observations):
 
         "4. 末尾列出资料中出现的 URL（最多 8 条）。\n"
 
-        "5. 直接输出 Markdown 正文，不要用代码块包裹。\n\n"
+        "5. 直接输出 Markdown 正文，不要代码块包裹。\n\n"
 
         "资料：\n" + context[:8000]
 
@@ -320,7 +320,15 @@ def write_report(goal, observations):
 
     messages = [{"role": "user", "content": prompt}]
 
-    return _chat(messages, temperature=0.3, max_tokens=1536).strip()
+    if on_chunk:
+        try:
+            result = _chat_stream(messages, temperature=0.3, max_tokens=2048, on_chunk=on_chunk).strip()
+            if result:
+                return result
+            print("[llm] stream empty, fallback")
+        except Exception as e:
+            print("[llm] stream failed: " + str(e)[:120])
+    return _chat(messages, temperature=0.3, max_tokens=2048).strip()
 
 
 
@@ -328,11 +336,7 @@ def write_report(goal, observations):
 
 def summarize(text):
 
-    messages = [
-
-        {"role": "user", "content": "用 3 句话总结以下内容，保留关键事实和来源：\n" + text[:6000]},
-
-    ]
+    messages = [{"role": "user", "content": "用 3 句话总结以下内容，保留关键事实和来源：\n" + text[:6000]}]
 
     return _chat(messages, temperature=0.2, max_tokens=512).strip()
 

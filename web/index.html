@@ -318,6 +318,11 @@ function start() {
 
       else if (t === "error") logLine("error", "错误: " + d.message);
 
+      else if (t === "chunk") {
+        report.textContent += (d.text || "");
+        report.style.display = "block";
+        report.scrollTop = report.scrollHeight;
+      }
       else if (t === "done") {
 
         report.textContent = d.report || "";

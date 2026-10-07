@@ -110,8 +110,6 @@ def _build_candidates(goal, max_n=5):
 
 def run_agent(goal, auto_confirm=False, on_event=None):
 
-    """on_event(type, data) 会在关键节点被调用, 用于流式推送到 Web UI"""
-
     def emit(t, d=None):
 
         if on_event:
@@ -135,8 +133,6 @@ def run_agent(goal, auto_confirm=False, on_event=None):
 
 
     console.print("[cyan]初始搜索[/cyan] -> web_search")
-
-    console.print("  查询: " + goal)
 
     emit("step", {"step": 0, "action": "web_search", "query": goal})
 
@@ -222,7 +218,11 @@ def run_agent(goal, auto_confirm=False, on_event=None):
 
             try:
 
-                result = write_report(goal, observations)
+                def on_chunk(txt):
+
+                    emit("chunk", {"text": txt})
+
+                result = write_report(goal, observations, on_chunk=on_chunk)
 
             except Exception as e:
 
@@ -270,7 +270,11 @@ def run_agent(goal, auto_confirm=False, on_event=None):
 
                 try:
 
-                    result = write_report(goal, observations)
+                    def on_chunk(txt):
+
+                        emit("chunk", {"text": txt})
+
+                    result = write_report(goal, observations, on_chunk=on_chunk)
 
                 except Exception as e:
 
