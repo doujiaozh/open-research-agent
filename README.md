@@ -1,3 +1,4 @@
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/doujiaozh/badge.svg)](https://hub.xerj.org/contributors/doujiaozh)
 Open Research Agent
 ===================
 
